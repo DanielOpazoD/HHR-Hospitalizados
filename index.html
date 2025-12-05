@@ -285,18 +285,30 @@ let pyodide = null;
   });
 
   try {
-    log.textContent += "Pyodide cargado.\nImportando pandas y pyarrow...\n";
+    log.textContent += "Pyodide cargado.\nImportando pandas...\n";
 
-    await pyodide.loadPackage(["pandas", "pyarrow"]);
-    log.textContent += "Dependencias descargadas.\n";
+    await pyodide.loadPackage(["pandas"]);
+    log.textContent += "pandas descargado.\n";
 
-    await pyodide.runPythonAsync("import pandas as pd\nimport pyarrow");
-    log.textContent += "pandas y pyarrow disponibles.\n";
+    await pyodide.runPythonAsync("import pandas as pd");
+    log.textContent += "pandas disponible.\n";
+
+    // pyarrow es opcional; en Pyodide 0.26 no existe un paquete precompilado.
+    // Intentamos cargarlo para quienes lo tengan habilitado, pero no bloqueamos
+    // la aplicación si no está disponible.
+    try {
+      log.textContent += "Intentando cargar pyarrow (opcional)...\n";
+      await pyodide.loadPackage(["pyarrow"]);
+      await pyodide.runPythonAsync("import pyarrow");
+      log.textContent += "pyarrow disponible.\n";
+    } catch (err) {
+      log.textContent += "AVISO: pyarrow no está disponible en Pyodide; se usará pandas con backend por defecto.\n";
+    }
 
     pyodideReady = true;
     document.getElementById("run-btn").disabled = false;
   } catch (err) {
-    log.textContent += `ERR: Falló la carga de dependencias: ${err}\n`;
+    log.textContent += `ERR: Falló la carga de pandas: ${err}\n`;
   }
 })();
 
