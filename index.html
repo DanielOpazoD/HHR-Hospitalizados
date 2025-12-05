@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8">
+    <title>CodePen - A Pen by Daniel</title>
+    
+
+  </head>
+    
+  <body>
+  <!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Analizador de Hospitalizados - Hospital Hanga Roa</title>
+
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 1.5rem 2rem 3rem;
+      background: #f4f6fb;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      margin-bottom: 0.4rem;
+      color: #263238;
+    }
+
+    .panel {
+      background: #ffffff;
+      border-radius: 10px;
+      padding: 1rem 1.3rem;
+      margin-bottom: 1.3rem;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    }
+
+    label {
+      font-size: 0.95rem;
+      margin-right: 0.5rem;
+      font-weight: 500;
+    }
+
+    input[type="file"] {
+      margin: 0.4rem 0.9rem 0.6rem 0;
+      font-size: 0.95rem;
+    }
+
+    button {
+      padding: 0.45rem 1rem;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-size: 0.95rem;
+      background: #1976d2;
+      color: white;
+      margin-right: 0.6rem;
+      transition: 0.2s;
+    }
+
+    button:hover:not(:disabled) {
+      background: #125ca1;
+    }
+
+    button:disabled {
+      background: #b0bec5;
+      cursor: default;
+    }
+
+    #status {
+      font-size: 0.85rem;
+      margin-left: 0.5rem;
+      color: #37474f;
+    }
+
+    #log {
+      font-size: 0.83rem;
+      white-space: pre-wrap;
+      background: #263238;
+      color: #eceff1;
+      padding: 0.7rem;
+      border-radius: 6px;
+      height: 250px;
+      overflow-y: auto;
+      border-left: 4px solid #1976d2;
+    }
+
+    .results-title {
+      font-size: 1.15rem;
+      margin-top: 0.5rem;
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+      color: #1d3557;
+    }
+
+    table {
+      border-collapse: collapse;
+      font-size: 0.80rem;
+      width: 100%;
+      margin-bottom: 1.2rem;
+    }
+
+    th, td {
+      border: 1px solid #cfd8dc;
+      padding: 5px 7px;
+      text-align: left;
+    }
+
+    th {
+      background: #e6f0fa;
+      font-weight: 600;
+    }
+
+    .download-buttons a {
+      margin-right: 1rem;
+      font-size: 0.9rem;
+      color: #0277bd;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .download-buttons a:hover {
+      text-decoration: underline;
+    }
+
+    .plots-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 1.2rem;
+    }
+
+    @media (min-width: 1300px) {
+      .plots-grid {
+        grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+      }
+    }
+
+    .plot-card {
+      background: #ffffff;
+      border-radius: 10px;
+      padding: 0.8rem;
+      box-shadow: 0 1px 5px rgba(0,0,0,0.05);
+    }
+
+    .plot-title {
+      font-size: 0.95rem;
+      margin-bottom: 0.4rem;
+      font-weight: 600;
+      color: #1d3557;
+    }
+
+    /* Selector de mes */
+    #month-selector {
+      font-size: 0.95rem;
+      padding: 0.4rem 0.6rem;
+      border-radius: 6px;
+      border: 1px solid #90a4ae;
+      margin-left: 1rem;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Analizador de Hospitalizados — Hospital Hanga Roa</h1>
+
+  <!-- PANEL: Carga de archivos -->
+  <div class="panel">
+    <label for="excel-file">Seleccionar archivo mensual (.xlsx):</label>
+    <input id="excel-file" type="file" accept=".xlsx" />
+
+    <button id="run-btn" disabled>Agregar archivo mensual</button>
+    <button id="reset-btn" disabled>Reiniciar datos</button>
+
+    <span id="status"></span>
+
+    <div style="margin-top:0.5rem; font-size:0.85rem; color:#37474f;">
+      Puedes cargar múltiples meses (noviembre, diciembre, enero…).  
+      El sistema acumulará los datos y podrás elegir el mes a visualizar.
+    </div>
+  </div>
+
+  <!-- PANEL: LOG DE EJECUCIÓN -->
+  <div class="panel">
+    <div class="results-title">Log de ejecución</div>
+    <div id="log"></div>
+  </div>
+
+  <!-- PANEL: SELECTOR DE MES -->
+  <div class="panel">
+    <div class="results-title">Visualizar mes</div>
+    <select id="month-selector">
+      <option value="">-- Selecciona un mes --</option>
+    </select>
+
+    <div style="font-size:0.8rem; margin-top:0.3rem;">
+      Los gráficos y tablas se actualizarán según el mes seleccionado.
+    </div>
+  </div>
+
+  <!-- PANEL: TABLA RESUMEN -->
+  <div class="panel">
+    <div class="results-title">Resumen por paciente</div>
+
+    <div class="download-buttons">
+      <a id="download-summary" href="#" download="resumen_pacientes.csv" style="display:none;">⬇ Resumen pacientes</a>
+      <a id="download-daily" href="#" download="ocupacion_diaria.csv" style="display:none;">⬇ Ocupación diaria</a>
+      <a id="download-flows" href="#" download="flujos_diarios.csv" style="display:none;">⬇ Flujos diarios</a>
+      <a id="download-zip" href="#" download="todos_los_csv.zip" style="display:none;">⬇ Descargar todos (ZIP)</a>
+    </div>
+
+    <div id="summary-table"></div>
+  </div>
+
+  <!-- PANEL: TABLA DIARIA -->
+  <div class="panel">
+    <div class="results-title">Ocupación diaria</div>
+    <div id="daily-table"></div>
+  </div>
+
+  <!-- PANEL: GRÁFICOS -->
+  <div class="panel">
+    <div class="results-title">Gráficos</div>
+
+    <div class="plots-grid">
+      <div class="plot-card">
+        <div class="plot-title">Ocupación total y UPC por día</div>
+        <div id="plot-ocupacion"></div>
+      </div>
+
+      <div class="plot-card">
+        <div class="plot-title">Ingresos y egresos diarios</div>
+        <div id="plot-flujos"></div>
+      </div>
+
+      <div class="plot-card">
+        <div class="plot-title">Altas vs Traslados por día</div>
+        <div id="plot-altas-traslados"></div>
+      </div>
+
+      <div class="plot-card">
+        <div class="plot-title">Distribución de días de estadía (LOS)</div>
+        <div id="plot-los-hist"></div>
+      </div>
+
+      <div class="plot-card">
+        <div class="plot-title">LOS promedio: UPC vs No UPC</div>
+        <div id="plot-los-upc"></div>
+      </div>
+
+      <div class="plot-card">
+        <div class="plot-title">LOS promedio: UTI vs Media vs Otra</div>
+        <div id="plot-los-cama"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- JSON oculto -->
+  <script type="application/json" id="data-json"></script>
+  <script type="application/json" id="summary-json"></script>
+  <script type="application/json" id="daily-json"></script>
+  <script type="application/json" id="flows-json"></script>
+  <script type="application/json" id="los-json"></script>
+  <script type="application/json" id="los-upc-json"></script>
+  <script type="application/json" id="los-cama-json"></script>
+
+  <!-- Librerías externas -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.26.0/full/pyodide.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
+
+<script>
+let pyodideReady = false;
+let pyodide = null;
+
+// Inicializar Pyodide + Pandas
+(async function loadPyodideAndPackages() {
+  const log = document.getElementById("log");
+  log.textContent += "Cargando Pyodide...\n";
+
+  pyodide = await loadPyodide({
+    stdout: (msg) => log.textContent += msg + "\n",
+    stderr: (msg) => log.textContent += "ERR: " + msg + "\n",
+  });
+
+  log.textContent += "Pyodide cargado.\nImportando pandas...\n";
+
+  await pyodide.loadPackage("pandas");
+
+  log.textContent += "pandas importado.\n";
+  pyodideReady = true;
+
+  document.getElementById("run-btn").disabled = false;
+})();
+
+
+// Almacenamiento global
+let GLOBAL_DATASET = [];     // Hospitalizados por día
+let GLOBAL_ALTAS = [];       // Altas del mes
+let GLOBAL_TRASLADOS = [];   // Traslados del mes
+let GLOBAL_MESES = new Set(); // Meses disponibles
+
+// Selección de archivo
+document.getElementById("excel-file").addEventListener("change", () => {
+  document.getElementById("run-btn").disabled = false;
+});
+
+
+// MAIN: Procesar mes
+document.getElementById("run-btn").addEventListener("click", async () => {
+  const fileInput = document.getElementById("excel-file");
+  const file = fileInput.files[0];
+  const log = document.getElementById("log");
+  const status = document.getElementById("status");
+
+  if (!file) return;
+
+  if (!pyodideReady) {
+    alert("Pyodide aún no está listo.");
+    return;
+  }
+
+  status.textContent = "Procesando...";
+  log.textContent += "\n=============================\n";
+  log.textContent += `Archivo recibido: ${file.name}\n`;
+
+  // Leer el archivo con SheetJS
+  const data = await file.arrayBuffer();
+  const workbook = XLSX.read(data, { type: "array" });
+
+  const sheetNames = workbook.SheetNames;
+  log.textContent += "Hojas encontradas: " + sheetNames.join(", ") + "\n";
+
+  // Pasar cada hoja a CSV y procesarla en Python
+  for (let i = 0; i < sheetNames.length; i++) {
+    const sheetName = sheetNames[i];
+    try {
+      const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[sheetName]);
+
+      // Guardar CSV en Pyodide FS
+      const fname = `sheet_${i}.csv`;
+      pyodide.FS.writeFile(fname, csv);
+      log.textContent += `→ Procesando hoja ${sheetName} ...\n`;
+
+      // Ejecutar función Python para esa hoja
+      const pythonCode = `
+import pandas as pd
+import numpy as np
+
+df = pd.read_csv("${fname}")
+
+# Normalizar columnas eliminando vacías
+df = df.dropna(axis=1, how="all")
+
+# Identificar fecha por nombre de hoja
+import re
+sheet = "${sheetName}".strip()
+
+m = re.search(r"(\\d{1,2})[-/](\\d{1,2})[-/](\\d{2,4})", sheet)
+if m:
+    d, mth, y = m.groups()
+    if len(y) == 2:
+        y = "20" + y
+    fecha = f"{y}-{int(mth):02d}-{int(d):02d}"
+else:
+    fecha = None
+
+# Detectar bloques por encabezados
+df_str = df.astype(str)
+
+# Hospitalizados = tabla principal (primera sección con 'RUT')
+idx_rut = df_str.columns.str.contains("RUT", case=False)
+if idx_rut.any():
+    rut_col = df_str.columns[idx_rut][0]
+else:
+    rut_col = None
+
+# Parse hospitalizados
+hospitalizados = df.copy()
+hospitalizados["FECHA"] = fecha
+
+# ALTAS: Filas bajo la palabra "ALTA" o "ALTAS"
+mask_altas = df_str.apply(lambda row: row.astype(str).str.contains("ALTA", case=False)).any(axis=1)
+altas_df = pd.DataFrame()
+if mask_altas.any():
+    first_alta = mask_altas.idxmax()
+    altas_df = df.iloc[first_alta+1:].copy()
+    altas_df["FECHA"] = fecha
+
+# TRASLADOS
+mask_tras = df_str.apply(lambda row: row.astype(str).str.contains("TRASL", case=False)).any(axis=1)
+tras_df = pd.DataFrame()
+if mask_tras.any():
+    first_tras = mask_tras.idxmax()
+    tras_df = df.iloc[first_tras+1:].copy()
+    tras_df["FECHA"] = fecha
+
+# Limpiar columnas completamente vacías
+hospitalizados = hospitalizados.dropna(axis=1, how="all")
+altas_df = altas_df.dropna(axis=1, how="all")
+tras_df = tras_df.dropna(axis=1, how="all")
+
+# Añadir nombre de hoja para debugging
+hospitalizados["HOJA"] = sheet
+altas_df["HOJA"] = sheet
+tras_df["HOJA"] = sheet
+
+# Devolver CSVs compactados
+hospitalizados.to_csv("out_hosp.csv", index=False)
+altas_df.to_csv("out_altas.csv", index=False)
+tras_df.to_csv("out_tras.csv", index=False)
+      `;
+
+      await pyodide.runPythonAsync(pythonCode);
+
+      // Recuperar CSV procesado
+      const hosp_csv = pyodide.FS.readFile("out_hosp.csv", { encoding: "utf8" });
+      const altas_csv = pyodide.FS.readFile("out_altas.csv", { encoding: "utf8" });
+      const tras_csv = pyodide.FS.readFile("out_tras.csv", { encoding: "utf8" });
+
+      // Convertir a arrays JS
+      GLOBAL_DATASET.push({
+        hoja: sheetName,
+        fecha: "", // se definirá luego
+        data: hosp_csv,
+      });
+
+      if (altas_csv.trim().length > 0) {
+        GLOBAL_ALTAS.push(altas_csv);
+      }
+      if (tras_csv.trim().length > 0) {
+        GLOBAL_TRASLADOS.push(tras_csv);
+      }
+
+      log.textContent += `✓ Hoja ${sheetName} procesada correctamente.\n`;
+
+    } catch (err) {
+      log.textContent += `ERROR en hoja ${sheetName}: ${err}\n`;
+    }
+  }
+
+  status.textContent = "Archivo incorporado.";
+  document.getElementById("reset-btn").disabled = false;
+
+  // Registrar el mes en GLOBAL_MESES
+  detectMonthsFromDataset();
+
+  updateMonthSelector();
+
+  log.textContent += "\n== MESES DISPONIBLES ==\n";
+  log.textContent += Array.from(GLOBAL_MESES).join(", ") + "\n";
+
+});
+/****************************************************
+  DETECTAR MESES PRESENTES EN LOS DATOS
+****************************************************/
+function detectMonthsFromDataset() {
+  GLOBAL_MESES.clear();
+
+  for (const entry of GLOBAL_DATASET) {
+    const csv = entry.data;
+    const lines = csv.split("\n");
+    if (lines.length < 2) continue;
+
+    const cols = lines[1].split(",");
+    const fechaIndex = cols.length - 2;
+
+    if (fechaIndex >= 0) {
+      const fecha = cols[fechaIndex];
+      if (/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+        const mes = fecha.slice(0, 7);
+        GLOBAL_MESES.add(mes);
+      }
+    }
+  }
+}
+
+
+/****************************************************
+  ACTUALIZAR SELECTOR DE MES
+****************************************************/
+function updateMonthSelector() {
+  const sel = document.getElementById("month-selector");
+
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">-- Selecciona un mes --</option>';
+
+  Array.from(GLOBAL_MESES)
+    .sort()
+    .forEach(m => {
+      const op = document.createElement("option");
+      op.value = m;
+      op.textContent = m;
+      sel.appendChild(op);
+    });
+
+  if (GLOBAL_MESES.has(prev)) sel.value = prev;
+}
+
+
+/****************************************************
+  CUANDO SE SELECCIONA UN MES PARA VISUALIZAR
+****************************************************/
+document.getElementById("month-selector").addEventListener("change", () => {
+  const mes = document.getElementById("month-selector").value;
+  if (!mes) return;
+
+  procesarMesSeleccionado(mes);
+});
+
+
+/****************************************************
+  PROCESAR MES SELECCIONADO → PYTHON
+****************************************************/
+async function procesarMesSeleccionado(mes) {
+  const log = document.getElementById("log");
+  log.textContent += `\nProcesando mes seleccionado: ${mes}\n`;
+
+  // Enviar DATA global a Python
+  const pyData = {
+    dataset: GLOBAL_DATASET,
+    altas: GLOBAL_ALTAS,
+    traslados: GLOBAL_TRASLADOS,
+    mes: mes,
+  };
+
+  const json = JSON.stringify(pyData);
+  pyodide.FS.writeFile("input_mes.json", json);
+
+  const python = `
+import pandas as pd
+import numpy as np
+import json
+
+with open("input_mes.json","r") as f:
+    data = json.load(f)
+
+dataset = data["dataset"]
+altas_raw = data["altas"]
+tras_raw = data["traslados"]
+mes = data["mes"]
+
+#-----------------------------
+# Construir hospitalizados
+#-----------------------------
+rows = []
+for item in dataset:
+    csv = item["data"]
+    temp = pd.read_csv(pd.compat.StringIO(csv))
+    rows.append(temp)
+
+df = pd.concat(rows, ignore_index=True)
+
+# Filtrar mes
+df = df[df["FECHA"].astype(str).str.startswith(mes)]
+
+# Normalizar fechas
+for col in ["FECHA", "INGRESO", "HOJA"]:
+    if col in df.columns:
+        df[col] = pd.to_datetime(df[col], errors="coerce")
+
+#-----------------------------
+# ALTAS y TRASLADOS (opcional)
+#-----------------------------
+altas_list = []
+for a in altas_raw:
+    tmp = pd.read_csv(pd.compat.StringIO(a))
+    if "FECHA" in tmp.columns:
+        tmp["FECHA"] = pd.to_datetime(tmp["FECHA"], errors="coerce")
+    altas_list.append(tmp)
+
+tras_list = []
+for t in tras_raw:
+    tmp = pd.read_csv(pd.compat.StringIO(t))
+    if "FECHA" in tmp.columns:
+        tmp["FECHA"] = pd.to_datetime(tmp["FECHA"], errors="coerce")
+    tras_list.append(tmp)
+
+df_altas = pd.concat(altas_list, ignore_index=True) if altas_list else pd.DataFrame()
+df_tras = pd.concat(tras_list, ignore_index=True) if tras_list else pd.DataFrame()
+
+# Filtrar mes
+if not df_altas.empty:
+    df_altas = df_altas[df_altas["FECHA"].astype(str).str.startswith(mes)]
+if not df_tras.empty:
+    df_tras = df_tras[df_tras["FECHA"].astype(str).str.startswith(mes)]
+
+#-----------------------------
+# Calcular fecha ingreso / egreso
+#-----------------------------
+df["RUT"] = df["RUT"].astype(str).str.strip()
+
+# Fecha ingreso = primera aparición
+ingresos = df.groupby("RUT")["FECHA"].min().rename("FECHA_INGRESO")
+
+# Fecha egreso GOLD = última aparición
+egresos = df.groupby("RUT")["FECHA"].max().rename("FECHA_EGRESO_GOLD")
+
+summary = pd.concat([ingresos, egresos], axis=1)
+
+# Egreso declarado (si existe)
+if not df_altas.empty:
+    dec = df_altas.groupby("RUT")["FECHA"].min().rename("FECHA_EGRESO_DECLARADA")
+    summary = summary.merge(dec, on="RUT", how="left")
+
+if not df_tras.empty:
+    tr = df_tras.groupby("RUT")["FECHA"].min().rename("FECHA_TRASLADO")
+    summary = summary.merge(tr, on="RUT", how="left")
+
+# Egreso final (toma declarada o traslado si existe, sino GOLD)
+summary["FECHA_EGRESO_FINAL"] = summary["FECHA_EGRESO_DECLARADA"].combine_first(
+                                   summary["FECHA_TRASLADO"]).combine_first(
+                                   summary["FECHA_EGRESO_GOLD"])
+
+# Calcular días
+summary["DIAS_ESTADIA"] = (summary["FECHA_EGRESO_FINAL"] - summary["FECHA_INGRESO"]).dt.days + 1
+
+#-----------------------------
+# Cálculo por día (ocupación)
+#-----------------------------
+dias = pd.date_range(summary["FECHA_INGRESO"].min(), summary["FECHA_EGRESO_FINAL"].max())
+occ = pd.DataFrame({"FECHA": dias})
+occ["OCUPACION"] = occ["FECHA"].apply(lambda f: ((summary["FECHA_INGRESO"] <= f) & (summary["FECHA_EGRESO_FINAL"] >= f)).sum())
+
+# UPC
+if "UPC" in df.columns:
+    upc_map = df.groupby("RUT")["UPC"].apply(lambda x: (x == "SI").any())
+    summary = summary.merge(upc_map.rename("UPC"), on="RUT", how="left")
+
+occ["UPC"] = occ["FECHA"].apply(lambda f: ((summary["FECHA_INGRESO"] <= f) & 
+                                           (summary["FECHA_EGRESO_FINAL"] >= f) &
+                                           (summary["UPC"] == True)).sum())
+
+#-----------------------------
+# Altas y traslados diarios
+#-----------------------------
+flujos = pd.DataFrame({"FECHA": dias})
+flujos["ALTAS"] = flujos["FECHA"].map(df_altas.groupby("FECHA").size() if not df_altas.empty else {})
+flujos["TRASLADOS"] = flujos["FECHA"].map(df_tras.groupby("FECHA").size() if not df_tras.empty else {})
+flujos["ALTAS"] = flujos["ALTAS"].fillna(0).astype(int)
+flujos["TRASLADOS"] = flujos["TRASLADOS"].fillna(0).astype(int)
+
+#-----------------------------
+# Preparar JSON de salida
+#-----------------------------
+summary_out = summary.reset_index()
+summary_out["FECHA_INGRESO"] = summary_out["FECHA_INGRESO"].dt.strftime("%Y-%m-%d")
+summary_out["FECHA_EGRESO_FINAL"] = summary_out["FECHA_EGRESO_FINAL"].dt.strftime("%Y-%m-%d")
+
+occ_out = occ.copy()
+occ_out["FECHA"] = occ_out["FECHA"].dt.strftime("%Y-%m-%d")
+
+flujos_out = flujos.copy()
+flujos_out["FECHA"] = flujos_out["FECHA"].dt.strftime("%Y-%m-%d")
+
+# JSON
+open("summary.json","w").write(summary_out.to_json(orient="records"))
+open("occ.json","w").write(occ_out.to_json(orient="records"))
+open("flujos.json","w").write(flujos_out.to_json(orient="records"))
+open("los.json","w").write(summary_out["DIAS_ESTADIA"].dropna().to_json(orient="records"))
+`;
+
+  await pyodide.runPythonAsync(python);
+
+  // Leer JSONs desde Pyodide
+  document.getElementById("summary-json").textContent =
+    pyodide.FS.readFile("summary.json", { encoding: "utf8" });
+
+  document.getElementById("daily-json").textContent =
+    pyodide.FS.readFile("occ.json", { encoding: "utf8" });
+
+  document.getElementById("flows-json").textContent =
+    pyodide.FS.readFile("flujos.json", { encoding: "utf8" });
+
+  document.getElementById("los-json").textContent =
+    pyodide.FS.readFile("los.json", { encoding: "utf8" });
+
+  construirTablasYGraficos(mes);
+}
+
+
+/****************************************************
+  CONSTRUIR TABLAS Y GRÁFICOS
+****************************************************/
+function construirTablasYGraficos(mes) {
+  const summary = JSON.parse(document.getElementById("summary-json").textContent);
+  const daily = JSON.parse(document.getElementById("daily-json").textContent);
+  const flows = JSON.parse(document.getElementById("flows-json").textContent);
+  const los = JSON.parse(document.getElementById("los-json").textContent);
+
+  // -------------------------------------------------------
+  // TABLA RESUMEN
+  // -------------------------------------------------------
+  let html = "<table><tr>";
+  for (const key in summary[0]) html += `<th>${key}</th>`;
+  html += "</tr>";
+
+  summary.forEach(row => {
+    html += "<tr>";
+    for (const key in row) html += `<td>${row[key]}</td>`;
+    html += "</tr>";
+  });
+
+  html += "</table>";
+  document.getElementById("summary-table").innerHTML = html;
+
+  // -------------------------------------------------------
+  // TABLA OCUPACIÓN DIARIA
+  // -------------------------------------------------------
+  let html2 = "<table><tr><th>FECHA</th><th>OCUPACION</th><th>UPC</th></tr>";
+  daily.forEach(d => {
+    html2 += `<tr><td>${d.FECHA}</td><td>${d.OCUPACION}</td><td>${d.UPC}</td></tr>`;
+  });
+  html2 += "</table>";
+  document.getElementById("daily-table").innerHTML = html2;
+
+  // -------------------------------------------------------
+  // GRÁFICOS
+  // -------------------------------------------------------
+
+  // 1) OCUPACIÓN
+  Plotly.newPlot("plot-ocupacion", [{
+    x: daily.map(d => d.FECHA),
+    y: daily.map(d => d.OCUPACION),
+    name: "Ocupación",
+    mode: "lines+markers"
+  }, {
+    x: daily.map(d => d.FECHA),
+    y: daily.map(d => d.UPC),
+    name: "UPC",
+    mode: "lines+markers"
+  }], {
+    title: `Ocupación — ${mes}`,
+    margin: { t: 35 }
+  });
+
+  // 2) FLUJOS
+  Plotly.newPlot("plot-flujos", [{
+    x: flows.map(d => d.FECHA),
+    y: flows.map(d => d.ALTAS),
+    name: "Altas",
+    mode: "lines+markers"
+  }, {
+    x: flows.map(d => d.FECHA),
+    y: flows.map(d => d.TRASLADOS),
+    name: "Traslados",
+    mode: "lines+markers"
+  }], {
+    title: `Altas y Traslados — ${mes}`,
+    margin: { t: 35 }
+  });
+
+  // 3) HISTOGRAMA LOS
+  Plotly.newPlot("plot-los-hist", [{
+    x: los,
+    type: "histogram",
+    name: "LOS"
+  }], {
+    title: "Distribución de LOS",
+    margin: { t: 35 }
+  });
+}
+
+
+/****************************************************
+  BOTÓN RESET
+****************************************************/
+document.getElementById("reset-btn").addEventListener("click", () => {
+  GLOBAL_DATASET = [];
+  GLOBAL_ALTAS = [];
+  GLOBAL_TRASLADOS = [];
+  GLOBAL_MESES = new Set();
+
+  document.getElementById("summary-table").innerHTML = "";
+  document.getElementById("daily-table").innerHTML = "";
+  document.getElementById("log").textContent = "Reiniciado.\n";
+
+  updateMonthSelector();
+});
+
+
+</script>
+
+</body>
+</html>
+    
+  </body>
+  
+</html>
