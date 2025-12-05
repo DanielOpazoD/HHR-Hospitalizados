@@ -284,14 +284,32 @@ let pyodide = null;
     stderr: (msg) => log.textContent += "ERR: " + msg + "\n",
   });
 
-  log.textContent += "Pyodide cargado.\nImportando pandas...\n";
+  try {
+    log.textContent += "Pyodide cargado.\nImportando pandas...\n";
 
-  await pyodide.loadPackage("pandas");
+    await pyodide.loadPackage(["pandas"]);
+    log.textContent += "pandas descargado.\n";
 
-  log.textContent += "pandas importado.\n";
-  pyodideReady = true;
+    await pyodide.runPythonAsync("import pandas as pd");
+    log.textContent += "pandas disponible.\n";
 
-  document.getElementById("run-btn").disabled = false;
+    // pyarrow es opcional; en Pyodide 0.26 no existe un paquete precompilado.
+    // Intentamos cargarlo para quienes lo tengan habilitado, pero no bloqueamos
+    // la aplicación si no está disponible.
+    try {
+      log.textContent += "Intentando cargar pyarrow (opcional)...\n";
+      await pyodide.loadPackage(["pyarrow"]);
+      await pyodide.runPythonAsync("import pyarrow");
+      log.textContent += "pyarrow disponible.\n";
+    } catch (err) {
+      log.textContent += "AVISO: pyarrow no está disponible en Pyodide; se usará pandas con backend por defecto.\n";
+    }
+
+    pyodideReady = true;
+    document.getElementById("run-btn").disabled = false;
+  } catch (err) {
+    log.textContent += `ERR: Falló la carga de pandas: ${err}\n`;
+  }
 })();
 
 
@@ -542,6 +560,12 @@ altas_raw = data["altas"]
 tras_raw = data["traslados"]
 mes = data["mes"]
 
+def write_empty_outputs():
+    open("summary.json","w").write("[]")
+    open("occ.json","w").write("[]")
+    open("flujos.json","w").write("[]")
+    open("los.json","w").write("[]")
+
 #-----------------------------
 # Construir hospitalizados
 #-----------------------------
@@ -551,133 +575,156 @@ for item in dataset:
     temp = pd.read_csv(io.StringIO(csv))
     rows.append(temp)
 
-df = pd.concat(rows, ignore_index=True)
+df = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
 
 # Filtrar mes
-df = df[df["FECHA"].astype(str).str.startswith(mes)]
+if "FECHA" in df.columns:
+    df = df[df["FECHA"].astype(str).str.startswith(mes)]
 
 # Normalizar fechas
-for col in ["FECHA", "INGRESO", "HOJA"]:
+if "FECHA" in df.columns:
+    df["FECHA"] = pd.to_datetime(df["FECHA"], format="%Y-%m-%d", errors="coerce")
+for col in ["INGRESO"]:
     if col in df.columns:
         df[col] = pd.to_datetime(df[col], errors="coerce")
+
+# Si faltan columnas esenciales o no hay datos, devolver JSONs vacíos y salir
+if "RUT" not in df.columns or df.empty or ("FECHA" in df.columns and df["FECHA"].notna().sum() == 0):
+    print("WARN: No se encontraron datos válidos (columna RUT o FECHA) para el mes", mes)
+    write_empty_outputs()
+    datos_validos = False
+else:
+    datos_validos = True
 
 #-----------------------------
 # ALTAS y TRASLADOS (opcional)
 #-----------------------------
-altas_list = []
-for a in altas_raw:
-    tmp = pd.read_csv(io.StringIO(a))
-    if "FECHA" in tmp.columns:
-        tmp["FECHA"] = pd.to_datetime(tmp["FECHA"], errors="coerce")
-    altas_list.append(tmp)
+if datos_validos:
+    altas_list = []
+    for a in altas_raw:
+        tmp = pd.read_csv(io.StringIO(a))
+        if "FECHA" in tmp.columns:
+            tmp["FECHA"] = pd.to_datetime(tmp["FECHA"], format="%Y-%m-%d", errors="coerce")
+        altas_list.append(tmp)
 
-tras_list = []
-for t in tras_raw:
-    tmp = pd.read_csv(io.StringIO(t))
-    if "FECHA" in tmp.columns:
-        tmp["FECHA"] = pd.to_datetime(tmp["FECHA"], errors="coerce")
-    tras_list.append(tmp)
+    tras_list = []
+    for t in tras_raw:
+        tmp = pd.read_csv(io.StringIO(t))
+        if "FECHA" in tmp.columns:
+            tmp["FECHA"] = pd.to_datetime(tmp["FECHA"], format="%Y-%m-%d", errors="coerce")
+        tras_list.append(tmp)
 
-df_altas = pd.concat(altas_list, ignore_index=True) if altas_list else pd.DataFrame()
-df_tras = pd.concat(tras_list, ignore_index=True) if tras_list else pd.DataFrame()
+    df_altas = pd.concat(altas_list, ignore_index=True) if altas_list else pd.DataFrame()
+    df_tras = pd.concat(tras_list, ignore_index=True) if tras_list else pd.DataFrame()
 
-# Filtrar mes
-if not df_altas.empty:
-    df_altas = df_altas[df_altas["FECHA"].astype(str).str.startswith(mes)]
-if not df_tras.empty:
-    df_tras = df_tras[df_tras["FECHA"].astype(str).str.startswith(mes)]
+    # Filtrar mes
+    if not df_altas.empty:
+        df_altas = df_altas[df_altas["FECHA"].astype(str).str.startswith(mes)]
+    if not df_tras.empty:
+        df_tras = df_tras[df_tras["FECHA"].astype(str).str.startswith(mes)]
 
-#-----------------------------
-# Calcular fecha ingreso / egreso
-#-----------------------------
-df["RUT"] = df["RUT"].astype(str).str.strip()
+    #-----------------------------
+    # Calcular fecha ingreso / egreso
+    #-----------------------------
+    df["RUT"] = df["RUT"].astype(str).str.strip()
 
-# Fecha ingreso = primera aparición
-ingresos = df.groupby("RUT")["FECHA"].min().rename("FECHA_INGRESO")
+    # Fecha ingreso = primera aparición
+    ingresos = df.groupby("RUT")["FECHA"].min().rename("FECHA_INGRESO")
 
-# Fecha egreso GOLD = última aparición
-egresos = df.groupby("RUT")["FECHA"].max().rename("FECHA_EGRESO_GOLD")
+    # Fecha egreso GOLD = última aparición
+    egresos = df.groupby("RUT")["FECHA"].max().rename("FECHA_EGRESO_GOLD")
 
-summary = pd.concat([ingresos, egresos], axis=1)
+    summary = pd.concat([ingresos, egresos], axis=1)
 
-# Egreso declarado (si existe)
-if not df_altas.empty:
-    dec = df_altas.groupby("RUT")["FECHA"].min().rename("FECHA_EGRESO_DECLARADA")
-    summary = summary.merge(dec, on="RUT", how="left")
+    # Egreso declarado (si existe)
+    if not df_altas.empty:
+        dec = df_altas.groupby("RUT")["FECHA"].min().rename("FECHA_EGRESO_DECLARADA")
+        summary = summary.merge(dec, on="RUT", how="left")
 
-if not df_tras.empty:
-    tr = df_tras.groupby("RUT")["FECHA"].min().rename("FECHA_TRASLADO")
-    summary = summary.merge(tr, on="RUT", how="left")
+    if not df_tras.empty:
+        tr = df_tras.groupby("RUT")["FECHA"].min().rename("FECHA_TRASLADO")
+        summary = summary.merge(tr, on="RUT", how="left")
 
-# Egreso final (toma declarada o traslado si existe, sino GOLD)
-summary["FECHA_EGRESO_FINAL"] = summary["FECHA_EGRESO_DECLARADA"].combine_first(
-                                   summary["FECHA_TRASLADO"]).combine_first(
-                                   summary["FECHA_EGRESO_GOLD"])
+    # Egreso final (toma declarada o traslado si existe, sino GOLD)
+    summary["FECHA_EGRESO_FINAL"] = summary["FECHA_EGRESO_DECLARADA"].combine_first(
+                                       summary["FECHA_TRASLADO"]).combine_first(
+                                       summary["FECHA_EGRESO_GOLD"])
 
-# Calcular días
-summary["DIAS_ESTADIA"] = (summary["FECHA_EGRESO_FINAL"] - summary["FECHA_INGRESO"]).dt.days + 1
+    # Calcular días
+    summary["DIAS_ESTADIA"] = (summary["FECHA_EGRESO_FINAL"] - summary["FECHA_INGRESO"]).dt.days + 1
 
-#-----------------------------
-# Cálculo por día (ocupación)
-#-----------------------------
-dias = pd.date_range(summary["FECHA_INGRESO"].min(), summary["FECHA_EGRESO_FINAL"].max())
-occ = pd.DataFrame({"FECHA": dias})
-occ["OCUPACION"] = occ["FECHA"].apply(lambda f: ((summary["FECHA_INGRESO"] <= f) & (summary["FECHA_EGRESO_FINAL"] >= f)).sum())
+    #-----------------------------
+    # Cálculo por día (ocupación)
+    #-----------------------------
+    dias = pd.date_range(summary["FECHA_INGRESO"].min(), summary["FECHA_EGRESO_FINAL"].max())
+    occ = pd.DataFrame({"FECHA": dias})
+    occ["OCUPACION"] = occ["FECHA"].apply(lambda f: ((summary["FECHA_INGRESO"] <= f) & (summary["FECHA_EGRESO_FINAL"] >= f)).sum())
 
-# UPC
-if "UPC" in df.columns:
-    upc_map = df.groupby("RUT")["UPC"].apply(lambda x: (x == "SI").any())
-    summary = summary.merge(upc_map.rename("UPC"), on="RUT", how="left")
+    # UPC
+    if "UPC" in df.columns:
+        upc_map = df.groupby("RUT")["UPC"].apply(lambda x: (x == "SI").any())
+        summary = summary.merge(upc_map.rename("UPC"), on="RUT", how="left")
 
-occ["UPC"] = occ["FECHA"].apply(lambda f: ((summary["FECHA_INGRESO"] <= f) & 
-                                           (summary["FECHA_EGRESO_FINAL"] >= f) &
-                                           (summary["UPC"] == True)).sum())
+    occ["UPC"] = occ["FECHA"].apply(lambda f: ((summary["FECHA_INGRESO"] <= f) &
+                                               (summary["FECHA_EGRESO_FINAL"] >= f) &
+                                               (summary["UPC"] == True)).sum())
 
-#-----------------------------
-# Altas y traslados diarios
-#-----------------------------
-flujos = pd.DataFrame({"FECHA": dias})
-flujos["ALTAS"] = flujos["FECHA"].map(df_altas.groupby("FECHA").size() if not df_altas.empty else {})
-flujos["TRASLADOS"] = flujos["FECHA"].map(df_tras.groupby("FECHA").size() if not df_tras.empty else {})
-flujos["ALTAS"] = flujos["ALTAS"].fillna(0).astype(int)
-flujos["TRASLADOS"] = flujos["TRASLADOS"].fillna(0).astype(int)
+    #-----------------------------
+    # Altas y traslados diarios
+    #-----------------------------
+    flujos = pd.DataFrame({"FECHA": dias})
+    flujos["ALTAS"] = flujos["FECHA"].map(df_altas.groupby("FECHA").size() if not df_altas.empty else {})
+    flujos["TRASLADOS"] = flujos["FECHA"].map(df_tras.groupby("FECHA").size() if not df_tras.empty else {})
+    flujos["ALTAS"] = flujos["ALTAS"].fillna(0).astype(int)
+    flujos["TRASLADOS"] = flujos["TRASLADOS"].fillna(0).astype(int)
 
-#-----------------------------
-# Preparar JSON de salida
-#-----------------------------
-summary_out = summary.reset_index()
-summary_out["FECHA_INGRESO"] = summary_out["FECHA_INGRESO"].dt.strftime("%Y-%m-%d")
-summary_out["FECHA_EGRESO_FINAL"] = summary_out["FECHA_EGRESO_FINAL"].dt.strftime("%Y-%m-%d")
+    #-----------------------------
+    # Preparar JSON de salida
+    #-----------------------------
+    summary_out = summary.reset_index()
+    summary_out["FECHA_INGRESO"] = summary_out["FECHA_INGRESO"].dt.strftime("%Y-%m-%d")
+    summary_out["FECHA_EGRESO_FINAL"] = summary_out["FECHA_EGRESO_FINAL"].dt.strftime("%Y-%m-%d")
 
-occ_out = occ.copy()
-occ_out["FECHA"] = occ_out["FECHA"].dt.strftime("%Y-%m-%d")
+    occ_out = occ.copy()
+    occ_out["FECHA"] = occ_out["FECHA"].dt.strftime("%Y-%m-%d")
 
-flujos_out = flujos.copy()
-flujos_out["FECHA"] = flujos_out["FECHA"].dt.strftime("%Y-%m-%d")
+    flujos_out = flujos.copy()
+    flujos_out["FECHA"] = flujos_out["FECHA"].dt.strftime("%Y-%m-%d")
 
-# JSON
-open("summary.json","w").write(summary_out.to_json(orient="records"))
-open("occ.json","w").write(occ_out.to_json(orient="records"))
-open("flujos.json","w").write(flujos_out.to_json(orient="records"))
-open("los.json","w").write(summary_out["DIAS_ESTADIA"].dropna().to_json(orient="records"))
+    # JSON
+    open("summary.json","w").write(summary_out.to_json(orient="records"))
+    open("occ.json","w").write(occ_out.to_json(orient="records"))
+    open("flujos.json","w").write(flujos_out.to_json(orient="records"))
+    open("los.json","w").write(summary_out["DIAS_ESTADIA"].dropna().to_json(orient="records"))
+else:
+    write_empty_outputs()
 `;
 
-  await pyodide.runPythonAsync(python);
+  try {
+    await pyodide.runPythonAsync(python);
 
-  // Leer JSONs desde Pyodide
-  document.getElementById("summary-json").textContent =
-    pyodide.FS.readFile("summary.json", { encoding: "utf8" });
+    // Leer JSONs desde Pyodide
+    document.getElementById("summary-json").textContent =
+      pyodide.FS.readFile("summary.json", { encoding: "utf8" });
 
-  document.getElementById("daily-json").textContent =
-    pyodide.FS.readFile("occ.json", { encoding: "utf8" });
+    document.getElementById("daily-json").textContent =
+      pyodide.FS.readFile("occ.json", { encoding: "utf8" });
 
-  document.getElementById("flows-json").textContent =
-    pyodide.FS.readFile("flujos.json", { encoding: "utf8" });
+    document.getElementById("flows-json").textContent =
+      pyodide.FS.readFile("flujos.json", { encoding: "utf8" });
 
-  document.getElementById("los-json").textContent =
-    pyodide.FS.readFile("los.json", { encoding: "utf8" });
+    document.getElementById("los-json").textContent =
+      pyodide.FS.readFile("los.json", { encoding: "utf8" });
 
-  construirTablasYGraficos(mes);
+    construirTablasYGraficos(mes);
+  } catch (err) {
+    log.textContent += `ERR: Falló el procesamiento del mes ${mes}: ${err}\n`;
+    document.getElementById("summary-table").innerHTML = "No hay datos para este mes.";
+    document.getElementById("daily-table").innerHTML = "";
+    ["plot-ocupacion", "plot-flujos", "plot-los-hist"].forEach(id => {
+      document.getElementById(id).innerHTML = "";
+    });
+  }
 }
 
 
@@ -689,6 +736,15 @@ function construirTablasYGraficos(mes) {
   const daily = JSON.parse(document.getElementById("daily-json").textContent);
   const flows = JSON.parse(document.getElementById("flows-json").textContent);
   const los = JSON.parse(document.getElementById("los-json").textContent);
+
+  if (!summary.length) {
+    document.getElementById("summary-table").innerHTML = "No hay datos para este mes.";
+    document.getElementById("daily-table").innerHTML = "";
+    ["plot-ocupacion", "plot-flujos", "plot-los-hist"].forEach(id => {
+      document.getElementById(id).innerHTML = "";
+    });
+    return;
+  }
 
   // -------------------------------------------------------
   // TABLA RESUMEN
