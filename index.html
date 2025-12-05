@@ -284,11 +284,11 @@ let pyodide = null;
     stderr: (msg) => log.textContent += "ERR: " + msg + "\n",
   });
 
-  log.textContent += "Pyodide cargado.\nImportando pandas...\n";
+  log.textContent += "Pyodide cargado.\nImportando pandas y pyarrow...\n";
 
-  await pyodide.loadPackage("pandas");
+  await pyodide.loadPackage(["pandas", "pyarrow"]);
 
-  log.textContent += "pandas importado.\n";
+  log.textContent += "pandas y pyarrow importados.\n";
   pyodideReady = true;
 
   document.getElementById("run-btn").disabled = false;
