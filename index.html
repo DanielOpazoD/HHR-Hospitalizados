@@ -345,6 +345,12 @@ document.getElementById("run-btn").addEventListener("click", async () => {
 
       // Ejecutar función Python para esa hoja
       const pythonCode = `
+import warnings
+warnings.filterwarnings(
+    "ignore",
+    message="Pyarrow will become a required dependency of pandas",
+    category=DeprecationWarning,
+)
 import pandas as pd
 import numpy as np
 
@@ -451,6 +457,15 @@ tras_df.to_csv("out_tras.csv", index=False)
   log.textContent += "\n== MESES DISPONIBLES ==\n";
   log.textContent += Array.from(GLOBAL_MESES).join(", ") + "\n";
 
+  // Seleccionar automáticamente el primer mes disponible para evitar confusión
+  const mesesOrdenados = Array.from(GLOBAL_MESES).sort();
+  if (mesesOrdenados.length > 0) {
+    const selector = document.getElementById("month-selector");
+    selector.value = selector.value || mesesOrdenados[0];
+    log.textContent += `Mostrando mes: ${selector.value}\n`;
+    procesarMesSeleccionado(selector.value);
+  }
+
 });
 /****************************************************
   DETECTAR MESES PRESENTES EN LOS DATOS
@@ -529,6 +544,12 @@ async function procesarMesSeleccionado(mes) {
   pyodide.FS.writeFile("input_mes.json", json);
 
   const python = `
+import warnings
+warnings.filterwarnings(
+    "ignore",
+    message="Pyarrow will become a required dependency of pandas",
+    category=DeprecationWarning,
+)
 import pandas as pd
 import numpy as np
 import json
