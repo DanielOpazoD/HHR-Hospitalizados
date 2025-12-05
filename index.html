@@ -575,9 +575,19 @@ df = pd.concat(rows, ignore_index=True)
 df = df[df["FECHA"].astype(str).str.startswith(mes)]
 
 # Normalizar fechas
-for col in ["FECHA", "INGRESO", "HOJA"]:
+if "FECHA" in df.columns:
+    df["FECHA"] = pd.to_datetime(df["FECHA"], format="%Y-%m-%d", errors="coerce")
+for col in ["INGRESO"]:
     if col in df.columns:
         df[col] = pd.to_datetime(df[col], errors="coerce")
+
+# Si no hay datos para el mes, devolver JSONs vacíos y salir
+if df.empty or ("FECHA" in df.columns and df["FECHA"].notna().sum() == 0):
+    open("summary.json","w").write("[]")
+    open("occ.json","w").write("[]")
+    open("flujos.json","w").write("[]")
+    open("los.json","w").write("[]")
+    raise SystemExit
 
 #-----------------------------
 # ALTAS y TRASLADOS (opcional)
@@ -586,14 +596,14 @@ altas_list = []
 for a in altas_raw:
     tmp = pd.read_csv(io.StringIO(a))
     if "FECHA" in tmp.columns:
-        tmp["FECHA"] = pd.to_datetime(tmp["FECHA"], errors="coerce")
+        tmp["FECHA"] = pd.to_datetime(tmp["FECHA"], format="%Y-%m-%d", errors="coerce")
     altas_list.append(tmp)
 
 tras_list = []
 for t in tras_raw:
     tmp = pd.read_csv(io.StringIO(t))
     if "FECHA" in tmp.columns:
-        tmp["FECHA"] = pd.to_datetime(tmp["FECHA"], errors="coerce")
+        tmp["FECHA"] = pd.to_datetime(tmp["FECHA"], format="%Y-%m-%d", errors="coerce")
     tras_list.append(tmp)
 
 df_altas = pd.concat(altas_list, ignore_index=True) if altas_list else pd.DataFrame()
@@ -707,6 +717,15 @@ function construirTablasYGraficos(mes) {
   const daily = JSON.parse(document.getElementById("daily-json").textContent);
   const flows = JSON.parse(document.getElementById("flows-json").textContent);
   const los = JSON.parse(document.getElementById("los-json").textContent);
+
+  if (!summary.length) {
+    document.getElementById("summary-table").innerHTML = "No hay datos para este mes.";
+    document.getElementById("daily-table").innerHTML = "";
+    ["plot-ocupacion", "plot-flujos", "plot-los-hist"].forEach(id => {
+      document.getElementById(id).innerHTML = "";
+    });
+    return;
+  }
 
   // -------------------------------------------------------
   // TABLA RESUMEN
