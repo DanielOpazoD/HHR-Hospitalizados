@@ -284,14 +284,20 @@ let pyodide = null;
     stderr: (msg) => log.textContent += "ERR: " + msg + "\n",
   });
 
-  log.textContent += "Pyodide cargado.\nImportando pandas y pyarrow...\n";
+  try {
+    log.textContent += "Pyodide cargado.\nImportando pandas y pyarrow...\n";
 
-  await pyodide.loadPackage(["pandas", "pyarrow"]);
+    await pyodide.loadPackage(["pandas", "pyarrow"]);
+    log.textContent += "Dependencias descargadas.\n";
 
-  log.textContent += "pandas y pyarrow importados.\n";
-  pyodideReady = true;
+    await pyodide.runPythonAsync("import pandas as pd\nimport pyarrow");
+    log.textContent += "pandas y pyarrow disponibles.\n";
 
-  document.getElementById("run-btn").disabled = false;
+    pyodideReady = true;
+    document.getElementById("run-btn").disabled = false;
+  } catch (err) {
+    log.textContent += `ERR: Falló la carga de dependencias: ${err}\n`;
+  }
 })();
 
 
