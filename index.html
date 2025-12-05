@@ -532,6 +532,7 @@ async function procesarMesSeleccionado(mes) {
 import pandas as pd
 import numpy as np
 import json
+import io
 
 with open("input_mes.json","r") as f:
     data = json.load(f)
@@ -547,7 +548,7 @@ mes = data["mes"]
 rows = []
 for item in dataset:
     csv = item["data"]
-    temp = pd.read_csv(pd.compat.StringIO(csv))
+    temp = pd.read_csv(io.StringIO(csv))
     rows.append(temp)
 
 df = pd.concat(rows, ignore_index=True)
@@ -565,14 +566,14 @@ for col in ["FECHA", "INGRESO", "HOJA"]:
 #-----------------------------
 altas_list = []
 for a in altas_raw:
-    tmp = pd.read_csv(pd.compat.StringIO(a))
+    tmp = pd.read_csv(io.StringIO(a))
     if "FECHA" in tmp.columns:
         tmp["FECHA"] = pd.to_datetime(tmp["FECHA"], errors="coerce")
     altas_list.append(tmp)
 
 tras_list = []
 for t in tras_raw:
-    tmp = pd.read_csv(pd.compat.StringIO(t))
+    tmp = pd.read_csv(io.StringIO(t))
     if "FECHA" in tmp.columns:
         tmp["FECHA"] = pd.to_datetime(tmp["FECHA"], errors="coerce")
     tras_list.append(tmp)
