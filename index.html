@@ -557,9 +557,10 @@ df = pd.concat(rows, ignore_index=True)
 df = df[df["FECHA"].astype(str).str.startswith(mes)]
 
 # Normalizar fechas
-for col in ["FECHA", "INGRESO", "HOJA"]:
-    if col in df.columns:
-        df[col] = pd.to_datetime(df[col], errors="coerce")
+if "FECHA" in df.columns:
+    df["FECHA"] = pd.to_datetime(df["FECHA"], errors="coerce", format="%Y-%m-%d").dt.normalize()
+if "INGRESO" in df.columns:
+    df["INGRESO"] = pd.to_datetime(df["INGRESO"], errors="coerce", dayfirst=True).dt.normalize()
 
 #-----------------------------
 # ALTAS y TRASLADOS (opcional)
@@ -592,13 +593,19 @@ if not df_tras.empty:
 #-----------------------------
 df["RUT"] = df["RUT"].astype(str).str.strip()
 
-# Fecha ingreso = primera aparición
+# Fecha ingreso = INGRESO declarado si existe, sino primera aparición
 ingresos = df.groupby("RUT")["FECHA"].min().rename("FECHA_INGRESO")
 
 # Fecha egreso GOLD = última aparición
 egresos = df.groupby("RUT")["FECHA"].max().rename("FECHA_EGRESO_GOLD")
 
 summary = pd.concat([ingresos, egresos], axis=1)
+
+if "INGRESO" in df.columns:
+    ingreso_decl = df.groupby("RUT")["INGRESO"].min().rename("FECHA_INGRESO_DECLARADA")
+    summary = summary.merge(ingreso_decl, on="RUT", how="left")
+    summary["FECHA_INGRESO"] = summary["FECHA_INGRESO_DECLARADA"].combine_first(summary["FECHA_INGRESO"])
+    summary = summary.drop(columns=["FECHA_INGRESO_DECLARADA"])
 
 # Egreso declarado (si existe)
 if not df_altas.empty:
